@@ -2,7 +2,16 @@ let socket;
 
 document.getElementById('connectBtn').addEventListener('click', () => {
   const name = document.getElementById('playerName').value || 'Player';
-  socket = new WebSocket(`ws://localhost:8080/ws/`);
+  const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/ws`;
+  console.log('Connecting to WebSocket at:', wsUrl);
+  
+  try {
+    socket = new WebSocket(wsUrl);
+  } catch (err) {
+    console.error('WebSocket connection failed:', err);
+    status.textContent = '❌ Connection failed';
+    return;
+  }
 
   const status = document.getElementById('status');
   const output = document.getElementById('output');

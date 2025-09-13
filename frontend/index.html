@@ -279,12 +279,15 @@ function setupAIGame(difficulty) {
 function setupOnlineGame() {
     resetGame();
     // Connect to WebSocket
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.hostname;
-    const wsPort = window.location.port || (protocol === 'wss:' ? '443' : '80');
-    const wsUrl = `${protocol}//${wsHost}:${wsPort}/ws`;
+    const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/ws`;
     console.log('Connecting to WebSocket at:', wsUrl);
-    socket = new WebSocket(wsUrl);
+    // Add error handling for connection issues
+    try {
+        socket = new WebSocket(wsUrl);
+    } catch (err) {
+        console.error('WebSocket connection failed:', err);
+        roomInfo.textContent = 'Failed to connect to game server. Please try again.';
+    }
     
     socket.onopen = () => {
         console.log('Connected to game server');
