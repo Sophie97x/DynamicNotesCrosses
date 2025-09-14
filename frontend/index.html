@@ -350,8 +350,18 @@ function setupOnlineGame() {
         socket = null;
     }
     
-    // Connect to WebSocket with Safari compatibility
-    const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/ws`;
+    // Set up WebSocket URL based on hostname
+    const hostname = window.location.hostname;
+    let wsUrl;
+    
+    if (hostname === 'xo.sophiewilson.site') {
+        wsUrl = 'wss://xo.sophiewilson.site:8080/ws';  // Production
+    } else if (hostname === '192.168.0.50' || hostname.startsWith('192.168.')) {
+        wsUrl = `ws://${hostname}:8080/ws`;  // Local IP
+    } else {
+        wsUrl = 'ws://localhost:8080/ws';  // Local development
+    }
+    
     console.log('Connecting to WebSocket at:', wsUrl);
     
     // Add connection timeout
