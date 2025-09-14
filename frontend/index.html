@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>XO</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="icon" type="image/png" href="favicon.png">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="shortcut icon" type="image/svg+xml" href="/static/favicon.svg">
+<meta name="theme-color" content="#00ff00">
 <style>
 :root {
   --grid-size: min(80vw, 400px);
@@ -19,14 +20,15 @@ body {
   font-family: Arial, sans-serif;
   text-align: center;
   margin: 0;
-  padding: 0 10px;
-  padding-bottom: 60px; /* Space for footer */
+  padding: 60px 10px; /* Added top padding for home button */
+  padding-bottom: 100px; /* More space for footer */
   min-height: 100vh;
   background-color: #000;
   color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box;
 }
 
 h1 {
@@ -62,16 +64,27 @@ h1 {
 
 .home-button {
   position: fixed;
-  top: 20px;
-  left: 20px;
+  top: 10px;
+  left: 10px;
   z-index: 1000;
   min-width: unset;
+  padding: 8px 16px;
+  font-size: 14px;
 }
 
 @media (max-width: 600px) {
   .home-button {
-    position: static;
-    margin: 10px auto;
+    position: absolute;
+    margin: 0;
+  }
+  
+  #modeSelect {
+    margin-top: 50px; /* Space for home button */
+  }
+  
+  .grid {
+    margin-top: 10px;
+    margin-bottom: 20px;
   }
 }
 
@@ -207,15 +220,16 @@ h1 {
   bottom: 0;
   left: 0;
   width: 100%;
-  padding: 15px;
-  background-color: rgba(0, 0, 0, 0.9);
+  padding: 15px 5px;
+  background-color: rgba(0, 0, 0, 0.95);
   color: var(--primary-color);
   text-align: center;
-  font-size: clamp(12px, 2.5vw, 14px);
+  font-size: clamp(11px, 2.5vw, 14px);
   text-shadow: var(--primary-glow);
   backdrop-filter: blur(5px);
   z-index: 1000;
-  line-height: 1.5;
+  line-height: 1.6;
+  border-top: 1px solid rgba(0, 255, 0, 0.2);
 }
 </style>
 </head>
@@ -351,7 +365,12 @@ function setupOnlineGame() {
     }
     
     // Connect to WebSocket with Safari compatibility
-    const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/ws`;
+    let wsUrl;
+    if (window.location.protocol === 'https:') {
+        wsUrl = `wss://${window.location.host}/ws`;
+    } else {
+        wsUrl = `ws://${window.location.host}/ws`;
+    }
     console.log('Connecting to WebSocket at:', wsUrl);
     
     // Add connection timeout
@@ -366,18 +385,19 @@ function setupOnlineGame() {
         // Force binary type to arraybuffer for Safari compatibility
         socket.binaryType = 'arraybuffer';
         
-        // Add error handling for connection issues
-        socket.addEventListener('error', (error) => {
-            console.error('WebSocket error:', error);
-            roomInfo.textContent = 'Connection error. Please try again.';
-            clearTimeout(connectTimeout);
-        });
-        
-        socket.addEventListener('open', () => {
+        socket.onopen = () => {
             clearTimeout(connectTimeout);
             console.log('WebSocket connected successfully');
             roomInfo.textContent = 'Connected to server';
-        });
+            // Request initial stats
+            socket.send(JSON.stringify({ type: 'getStats' }));
+        };
+        
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            roomInfo.textContent = 'Connection error. Please try again.';
+            clearTimeout(connectTimeout);
+        };
         
     } catch (err) {
         console.error('WebSocket creation failed:', err);
