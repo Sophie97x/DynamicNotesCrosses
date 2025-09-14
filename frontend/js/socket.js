@@ -2,7 +2,10 @@ let socket;
 
 document.getElementById('connectBtn').addEventListener('click', () => {
   const name = document.getElementById('playerName').value || 'Player';
-  socket = new WebSocket(`ws://localhost:8080/ws/`);
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  console.log('Connecting to WebSocket at:', wsUrl);
+  socket = new WebSocket(wsUrl);
 
   const status = document.getElementById('status');
   const output = document.getElementById('output');
