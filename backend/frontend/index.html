@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>XO</title>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="shortcut icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='black'/><path d='M26 6L20 12L14 6L12 8L18 14L12 20L14 22L20 16L26 22L28 20L22 14L28 8Z' fill='lime' stroke='lime' stroke-width='1'/></svg>">
 <meta name="theme-color" content="#00ff00">
 <style>
 :root {
@@ -39,52 +38,74 @@ h1 {
   font-size: clamp(24px, 5vw, 36px);
 }
 #modeSelect {
-  display: flex;
+  display: flex !important; /* Force display */
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 15px;
   justify-content: center;
-  margin: 10px auto;
+  margin: 20px auto;
   max-width: var(--grid-size);
+  padding: 0 10px;
+  z-index: 100;
 }
 
 #modeSelect button,
 .action-btn,
 .home-button {
-  padding: 10px 20px;
+  padding: 12px 24px;
   font-size: clamp(14px, 3vw, 16px);
   background-color: var(--primary-color);
   color: #000;
-  border: none;
+  border: 2px solid var(--primary-color);
   border-radius: 5px;
   cursor: pointer;
   box-shadow: var(--primary-glow);
   white-space: nowrap;
-  min-width: 120px;
+  min-width: 140px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+#modeSelect button:hover,
+.action-btn:hover {
+  background-color: transparent;
+  color: var(--primary-color);
+  box-shadow: var(--intense-glow);
+}
+
+.header-container {
+  position: relative;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 20px;
 }
 
 .home-button {
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  z-index: 1000;
-  min-width: unset;
+  position: absolute;
+  top: 20px;
+  left: 20px;
   padding: 8px 16px;
   font-size: 14px;
+  z-index: 1000;
+}
+
+h1 {
+  margin: 60px auto 20px auto;
 }
 
 @media (max-width: 600px) {
   .home-button {
     position: absolute;
-    margin: 0;
+    top: 10px;
+    left: 10px;
   }
   
-  #modeSelect {
-    margin-top: 50px; /* Space for home button */
+  h1 {
+    font-size: 24px;
+    margin: 50px auto 15px auto;
   }
   
   .grid {
     margin-top: 10px;
-    margin-bottom: 20px;
   }
 }
 
@@ -230,12 +251,26 @@ h1 {
   z-index: 1000;
   line-height: 1.6;
   border-top: 1px solid rgba(0, 255, 0, 0.2);
+  transition: opacity 0.5s ease-in-out;
+  opacity: 1;
+}
+
+.footer.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.footer:hover {
+  opacity: 1;
+  pointer-events: auto;
 }
 </style>
 </head>
 <body>
-<button class="home-button" onclick="goHome()">Home</button>
-<h1>Dynamic Notes and Crosses</h1>
+<div class="header-container">
+  <button class="home-button" onclick="goHome()">Home</button>
+  <h1>Dynamic Notes and Crosses</h1>
+</div>
 <div id="modeSelect">
   <button onclick="selectMode('local')">Local 2-Player</button>
   <button onclick="selectMode('ai')">Play vs AI</button>
@@ -299,16 +334,6 @@ h1 {
   <div id="roomInfo"></div>
 </div>
 <script>
-// Game state
-let board = Array(9).fill(null);
-let moveHistory = [];
-let moveCount = 0;
-let currentMode = null;
-let currentTurn = 'X';
-let socket = null;
-let roomCode = null;
-let playerMark = null; // 'X' or 'O' in multiplayer
-
 // DOM elements
 const grid = document.getElementById('gameGrid');
 const cells = Array.from(document.querySelectorAll('[data-cell]'));
@@ -322,16 +347,27 @@ const playersOnline = document.getElementById('playersOnline');
 const playersInQueue = document.getElementById('playersInQueue');
 const roomInfo = document.getElementById('roomInfo');
 
+// Game state
+let board = Array(9).fill(null);
+let moveHistory = [];
+let moveCount = 0;
+let currentMode = null;
+let currentTurn = 'X';
+let socket = null;
+let roomCode = null;
+let playerMark = null; // 'X' or 'O' in multiplayer
+
 // Game logic
 function selectMode(mode) {
-    currentMode = mode;
+    // Reset any ongoing game
     resetGame();
+    currentMode = mode;
     
-    // Keep mode select visible and hide other panels
-    modeSelect.style.display = 'flex';
+    // Hide all settings panels first
     aiSettings.style.display = 'none';
     onlineSettings.style.display = 'none';
     
+    // Setup based on selected mode
     if (mode === 'local') {
         setupLocalGame();
     } else if (mode === 'ai') {
@@ -361,32 +397,90 @@ function setupAIGame(difficulty) {
 function setupOnlineGame() {
     resetGame();
     
+    // Remove all existing event listeners
+    cells.forEach(cell => {
+        cell.removeEventListener('click', handleOnlineMove);
+        cell.removeEventListener('click', handleLocalMove);
+        cell.removeEventListener('click', handlePlayerVsAIMove);
+    });
+    
     // Clean up any existing socket
     if (socket) {
         socket.close();
         socket = null;
     }
     
-    // Connect to WebSocket with Safari compatibility
+    // Connect to WebSocket
     let wsUrl;
-    if (window.location.protocol === 'https:') {
-        wsUrl = `wss://${window.location.host}/ws`;
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname.startsWith('192.168.');
+    
+    if (isLocal) {
+        // Local development
+        wsUrl = 'ws://localhost:8080/ws';
     } else {
-        wsUrl = `ws://${window.location.host}/ws`;
+        // Production (xo.sophiewilson.site)
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${wsProtocol}//${hostname}/ws`;
     }
+    
     console.log('Connecting to WebSocket at:', wsUrl);
     
-    // Add connection timeout
-    const connectTimeout = setTimeout(() => {
-        console.error('WebSocket connection timed out');
-        roomInfo.textContent = 'Connection timed out. Please try again.';
-    }, 5000);
+    let connectTimeout;
     
     try {
         socket = new WebSocket(wsUrl);
         
-        // Force binary type to arraybuffer for Safari compatibility
-        socket.binaryType = 'arraybuffer';
+        // Set up connection timeout before any event handlers
+        connectTimeout = setTimeout(() => {
+            if (socket && socket.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket connection timed out');
+                if (roomInfo) roomInfo.textContent = 'Connection timed out. Please try again.';
+                socket.close();
+            }
+        }, 5000);
+        
+        socket.onopen = () => {
+            clearTimeout(connectTimeout);  // Clear timeout on successful connection
+            console.log('WebSocket connected successfully');
+            if (roomInfo) roomInfo.textContent = 'Connected to server';
+            // Wait a short moment to ensure the connection is fully established
+            setTimeout(() => {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'getStats' }));
+                }
+            }, 100);
+        };
+        
+        socket.onclose = (event) => {
+            clearTimeout(connectTimeout);  // Clear timeout on close
+            console.log('WebSocket disconnected:', event.code, event.reason);
+            if (roomInfo) roomInfo.textContent = 'Disconnected from server';
+        };
+        
+        socket.onerror = (error) => {
+            clearTimeout(connectTimeout);  // Clear timeout on error
+            console.error('WebSocket error:', error);
+            if (roomInfo) roomInfo.textContent = 'Connection error';
+        };
+        
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleServerMessage(data);
+            } catch (err) {
+                console.error('Error handling message:', err);
+            }
+        };
+        
+    } catch (err) {
+        clearTimeout(connectTimeout);  // Clear timeout on error
+        console.error('Failed to create WebSocket:', err);
+        if (roomInfo) roomInfo.textContent = 'Failed to connect to server';
+    }
+    
+    try {
+        socket = new WebSocket(wsUrl);
         
         socket.onopen = () => {
             clearTimeout(connectTimeout);
@@ -396,10 +490,21 @@ function setupOnlineGame() {
             socket.send(JSON.stringify({ type: 'getStats' }));
         };
         
+        socket.onclose = () => {
+            console.log('WebSocket connection closed');
+            roomInfo.textContent = 'Disconnected from server';
+        };
+        
         socket.onerror = (error) => {
             console.error('WebSocket error:', error);
             roomInfo.textContent = 'Connection error. Please try again.';
             clearTimeout(connectTimeout);
+        };
+
+        // Setup message handler
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleServerMessage(data);
         };
         
     } catch (err) {
@@ -434,39 +539,89 @@ function setupOnlineGame() {
     };
 }
 
+function updateAvailableRooms(rooms) {
+    const roomsDiv = document.getElementById('availableRooms');
+    if (!roomsDiv) return;
+
+    roomsDiv.innerHTML = '';
+    if (!rooms || rooms.length === 0) {
+        roomsDiv.innerHTML = '<p>No rooms available</p>';
+        return;
+    }
+
+    rooms.forEach(room => {
+        const button = document.createElement('button');
+        button.className = 'action-btn';
+        button.textContent = `Join Room ${room}`;
+        button.onclick = () => joinRoom(room);
+        roomsDiv.appendChild(button);
+    });
+}
+
 function handleServerMessage(data) {
+    if (!data || !data.type) return;
+    
+    console.log('Received server message:', data.type);
+    
     switch(data.type) {
         case 'stats':
-            playersOnline.textContent = data.playersOnline;
-            playersInQueue.textContent = data.playersInQueue;
+            if (playersOnline) playersOnline.textContent = data.playersOnline || 0;
+            if (playersInQueue) playersInQueue.textContent = data.playersInQueue || 0;
             break;
         case 'matched':
             roomCode = data.roomCode;
             playerMark = data.playerMark;
-            currentTurn = 'X'; // Always start with X
-            roomInfo.textContent = `You are ${playerMark} - ${currentTurn}'s Turn`;
-            document.getElementById('displayedRoomCode').textContent = roomCode;
-            document.getElementById('roomCodeDisplay').style.display = 'inline-block';
-            document.getElementById('joinRoomPanel').style.display = 'none';
+            currentTurn = 'X'; // Game always starts with X
+            
+            // Remove existing event listeners first
+            cells.forEach(cell => {
+                cell.removeEventListener('click', handleOnlineMove);
+                cell.removeEventListener('click', handleLocalMove);
+                cell.removeEventListener('click', handlePlayerVsAIMove);
+            });
+            
+            // Add online move event listeners
+            cells.forEach(cell => {
+                cell.addEventListener('click', handleOnlineMove);
+            });
+            
+            // Update turn info based on player's mark
+            const turnMessage = playerMark === 'X' ? "It's your turn!" : "Waiting for opponent's move...";
+            if (roomInfo) roomInfo.textContent = `Room: ${roomCode} - You are ${playerMark} - ${turnMessage}`;
+            console.log('Game started. You are:', playerMark, 'Current turn:', currentTurn);
+            
+            const displayedRoomCode = document.getElementById('displayedRoomCode');
+            const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+            const joinRoomPanel = document.getElementById('joinRoomPanel');
+            
+            if (displayedRoomCode) displayedRoomCode.textContent = roomCode;
+            if (roomCodeDisplay) roomCodeDisplay.style.display = 'inline-block';
+            if (joinRoomPanel) joinRoomPanel.style.display = 'none';
+            
             cells.forEach(cell => cell.addEventListener('click', handleOnlineMove));
             break;
         case 'roomCreated':
             roomCode = data.roomCode;
-            document.getElementById('displayedRoomCode').textContent = roomCode;
-            document.getElementById('roomCodeDisplay').style.display = 'inline-block';
-            queueInfo.textContent = 'Waiting for opponent to join...';
+            const displayCode = document.getElementById('displayedRoomCode');
+            const codeDisplay = document.getElementById('roomCodeDisplay');
+            
+            if (displayCode) displayCode.textContent = roomCode;
+            if (codeDisplay) codeDisplay.style.display = 'inline-block';
+            if (queueInfo) queueInfo.textContent = 'Waiting for opponent to join...';
             break;
         case 'availableRooms':
             updateAvailableRooms(data.rooms);
             break;
         case 'move':
-            handleOpponentMove(data.position);
+            if (typeof handleOpponentMove === 'function') {
+                handleOpponentMove(data.position);
+            }
             break;
         case 'queue':
-            queueInfo.textContent = 'Waiting for opponent...';
+            if (queueInfo) queueInfo.textContent = 'Waiting for opponent...';
             break;
         case 'roomFull':
-            queueInfo.textContent = 'Room is full. Please try another room.';
+            if (queueInfo) queueInfo.textContent = 'Room is full. Please try another room.';
             break;
     }
 }
@@ -480,10 +635,9 @@ function handleLocalMove(e) {
     moveCount++;
     currentTurn = moveCount % 2 === 0 ? 'O' : 'X';
     board[index] = currentTurn;
-    placeMark(cell, currentTurn);
     
     // Update display
-    cell.textContent = mark;
+    cell.textContent = currentTurn;
     cell.classList.remove('empty');
     
     // Handle history
@@ -667,11 +821,18 @@ function joinRoom() {
 }
 
 function handleOnlineMove(e) {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    e.preventDefault();  // Prevent any default behavior
+    
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        console.log('No active WebSocket connection');
+        return;
+    }
     
     // Check if it's this player's turn
     if (currentTurn !== playerMark) {
-        roomInfo.textContent = `Room: ${roomCode} - You are ${playerMark} - Wait for your turn!`;
+        console.log('Not your turn! Current turn:', currentTurn, 'Your mark:', playerMark);
+        if (roomInfo) roomInfo.textContent = `Room: ${roomCode} - You are ${playerMark} - Wait for your turn!`;
+        e.stopPropagation();  // Stop event from bubbling
         return;
     }
     
@@ -700,11 +861,12 @@ function handleOnlineMove(e) {
 
 function handleOpponentMove(position) {
     if (position >= 0 && position < 9 && cells[position].classList.contains('empty')) {
-        const opponentMark = currentTurn;  // Use currentTurn as that's the current player's mark
+        const opponentMark = playerMark === 'X' ? 'O' : 'X';  // Determine opponent's mark based on player's mark
         board[position] = opponentMark;
         placeMark(cells[position], opponentMark);
-        currentTurn = currentTurn === 'X' ? 'O' : 'X';
-        roomInfo.textContent = `Room: ${roomCode} - You are ${playerMark} - ${currentTurn}'s Turn`;
+        currentTurn = playerMark;  // After opponent moves, it's player's turn
+        console.log('Opponent moved, now its your turn. Current turn:', currentTurn, 'Your mark:', playerMark);
+        if (roomInfo) roomInfo.textContent = `Room: ${roomCode} - You are ${playerMark} - It's your turn!`;
         checkWin();
     }
 }
@@ -822,9 +984,45 @@ function restartGame() {
     }
 }
 
-// Start in local 2-player mode
+// Start in local 2-player mode and handle footer
 window.onload = function() {
+    // Make sure modeSelect is visible and aiSettings/onlineSettings are hidden
+    modeSelect.style.display = 'flex';
+    aiSettings.style.display = 'none';
+    onlineSettings.style.display = 'none';
+    
+    // Start with local 2-player mode
     selectMode('local');
+    
+    // Footer auto-hide
+    const footer = document.querySelector('.footer');
+    let footerTimeout;
+
+    function showFooter() {
+        footer.classList.remove('hidden');
+    }
+
+    function hideFooter() {
+        footer.classList.add('hidden');
+    }
+
+    function resetFooterTimer() {
+        clearTimeout(footerTimeout);
+        showFooter();
+        footerTimeout = setTimeout(hideFooter, 20000); // 20 seconds
+    }
+
+    // Initial timer
+    resetFooterTimer();
+
+    // Show on hover
+    footer.addEventListener('mouseenter', () => {
+        clearTimeout(footerTimeout);
+        showFooter();
+    });
+
+    // Reset timer on mouse leave
+    footer.addEventListener('mouseleave', resetFooterTimer);
 };
 </script>
 <div class="footer">
