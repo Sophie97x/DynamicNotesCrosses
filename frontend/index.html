@@ -3,50 +3,99 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dynamic Notes and Crosses</title>
+<title>XO</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" href="favicon.png">
 <style>
+:root {
+  --grid-size: min(80vw, 400px);
+  --cell-size: calc(var(--grid-size) / 3.5);
+  --primary-color: #00ff00;
+  --primary-glow: 0 0 10px var(--primary-color);
+  --intense-glow: 0 0 10px var(--primary-color), 0 0 20px var(--primary-color);
+}
+
 body {
   font-family: Arial, sans-serif;
   text-align: center;
   margin: 0;
-  padding: 0;
+  padding: 0 10px;
+  padding-bottom: 60px; /* Space for footer */
+  min-height: 100vh;
   background-color: #000;
   color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
+
 h1 {
   margin-top: 20px;
-  color: #00ff00;
-  text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+  margin-bottom: 20px;
+  color: var(--primary-color);
+  text-shadow: var(--intense-glow);
+  font-size: clamp(24px, 5vw, 36px);
 }
+#modeSelect {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin: 10px auto;
+  max-width: var(--grid-size);
+}
+
+#modeSelect button,
+.action-btn,
 .home-button {
-  position: fixed;
-  top: 20px;
-  left: 20px;
   padding: 10px 20px;
-  font-size: 16px;
-  background-color: #00ff00;
+  font-size: clamp(14px, 3vw, 16px);
+  background-color: var(--primary-color);
   color: #000;
   border: none;
   border-radius: 5px;
   cursor: pointer;
-  box-shadow: 0 0 10px #00ff00;
-  z-index: 1000;
+  box-shadow: var(--primary-glow);
+  white-space: nowrap;
+  min-width: 120px;
 }
-.home-button:hover {
+
+.home-button {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  min-width: unset;
+}
+
+@media (max-width: 600px) {
+  .home-button {
+    position: static;
+    margin: 10px auto;
+  }
+}
+
+.home-button:hover,
+#modeSelect button:hover,
+.action-btn:hover {
   background-color: #004d00;
   color: #fff;
 }
+
 .room-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
   margin: 10px;
 }
+
 .room-join-container {
   display: none;
   gap: 10px;
   justify-content: center;
   margin: 10px;
+  flex-wrap: wrap;
 }
 .room-code-input {
   padding: 10px;
@@ -84,26 +133,27 @@ h1 {
 }
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-  margin: 40px auto;
-  width: 300px;
+  grid-template-columns: repeat(3, var(--cell-size));
+  gap: min(15px, 3vw);
+  margin: 20px auto;
+  width: var(--grid-size);
 }
+
 .cell {
-  width: 100px;
-  height: 100px;
+  width: var(--cell-size);
+  height: var(--cell-size);
   background: linear-gradient(145deg, #111, #222);
-  border: 2px solid #00ff00;
-  border-radius: 10px;
+  border: 2px solid var(--primary-color);
+  border-radius: min(10px, 2vw);
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 40px;
+  font-size: clamp(24px, 8vw, 40px);
   font-weight: bold;
-  color: #00ff00;
-  text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+  color: var(--primary-color);
+  text-shadow: var(--intense-glow);
   cursor: pointer;
-  box-shadow: 0 0 15px #00ff00, inset 0 0 10px #004d00;
+  box-shadow: var(--primary-glow), inset 0 0 10px #004d00;
   transition: all 0.3s ease;
 }
 .cell:hover {
@@ -151,6 +201,21 @@ h1 {
 .win-screen button:hover {
   background-color: #004d00;
   color: #fff;
+}
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 15px;
+  background-color: rgba(0, 0, 0, 0.9);
+  color: var(--primary-color);
+  text-align: center;
+  font-size: clamp(12px, 2.5vw, 14px);
+  text-shadow: var(--primary-glow);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+  line-height: 1.5;
 }
 </style>
 </head>
@@ -278,15 +343,46 @@ function setupAIGame(difficulty) {
 
 function setupOnlineGame() {
     resetGame();
-    // Connect to WebSocket
+    
+    // Clean up any existing socket
+    if (socket) {
+        socket.close();
+        socket = null;
+    }
+    
+    // Connect to WebSocket with Safari compatibility
     const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/ws`;
     console.log('Connecting to WebSocket at:', wsUrl);
-    // Add error handling for connection issues
+    
+    // Add connection timeout
+    const connectTimeout = setTimeout(() => {
+        console.error('WebSocket connection timed out');
+        roomInfo.textContent = 'Connection timed out. Please try again.';
+    }, 5000);
+    
     try {
         socket = new WebSocket(wsUrl);
+        
+        // Force binary type to arraybuffer for Safari compatibility
+        socket.binaryType = 'arraybuffer';
+        
+        // Add error handling for connection issues
+        socket.addEventListener('error', (error) => {
+            console.error('WebSocket error:', error);
+            roomInfo.textContent = 'Connection error. Please try again.';
+            clearTimeout(connectTimeout);
+        });
+        
+        socket.addEventListener('open', () => {
+            clearTimeout(connectTimeout);
+            console.log('WebSocket connected successfully');
+            roomInfo.textContent = 'Connected to server';
+        });
+        
     } catch (err) {
-        console.error('WebSocket connection failed:', err);
+        console.error('WebSocket creation failed:', err);
         roomInfo.textContent = 'Failed to connect to game server. Please try again.';
+        clearTimeout(connectTimeout);
     }
     
     socket.onopen = () => {
@@ -652,19 +748,34 @@ function showJoinRoom() {
 }
 
 function joinRoom() {
-    const roomCode = document.getElementById('roomCodeInput').value.trim();
+    const roomCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
     if (!roomCode) {
         alert('Please enter a room code');
         return;
     }
     if (socket && socket.readyState === WebSocket.OPEN) {
+        // Remove any existing click handlers
+        cells.forEach(cell => {
+            cell.removeEventListener('click', handleOnlineMove);
+            cell.removeEventListener('click', handleLocalMove);
+            cell.removeEventListener('click', handlePlayerVsAIMove);
+        });
+        
+        // Reset the game state
+        resetGame();
+        
+        // Send join request
         socket.send(JSON.stringify({ 
             type: 'joinRoom',
             roomCode: roomCode
         }));
+        
+        // Update UI
         document.getElementById('roomCodeInput').value = '';
         document.getElementById('joinRoomPanel').style.display = 'none';
         queueInfo.textContent = 'Joining room...';
+        
+        // Add click handlers for online play
         cells.forEach(cell => cell.addEventListener('click', handleOnlineMove));
     }
 }
@@ -687,6 +798,16 @@ function restartGame() {
         socket = null;
     }
 }
+
+// Start in local 2-player mode
+window.onload = function() {
+    selectMode('local');
+};
 </script>
+<div class="footer">
+    XO Game © 2025 Sophie Wilson<br>
+    All rights reserved. Created September 2025.<br>
+    A dynamic twist on the classic game of Tic-Tac-Toe
+</div>
 </body>
 </html>
