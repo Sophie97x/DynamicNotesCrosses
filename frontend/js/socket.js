@@ -2,10 +2,16 @@ let socket;
 
 document.getElementById('connectBtn').addEventListener('click', () => {
   const name = document.getElementById('playerName').value || 'Player';
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/ws`;
   console.log('Connecting to WebSocket at:', wsUrl);
-  socket = new WebSocket(wsUrl);
+  
+  try {
+    socket = new WebSocket(wsUrl);
+  } catch (err) {
+    console.error('WebSocket connection failed:', err);
+    status.textContent = '❌ Connection failed';
+    return;
+  }
 
   const status = document.getElementById('status');
   const output = document.getElementById('output');
@@ -17,8 +23,34 @@ document.getElementById('connectBtn').addEventListener('click', () => {
 
   socket.onmessage = (msg) => {
     const data = JSON.parse(msg.data);
-    if(data.type === 'message' || data.type === 'echo') {
-      output.innerHTML += `<div>${data.text}</div>`;
+    
+    switch(data.type) {
+        case 'message':
+        case 'echo':
+            output.innerHTML += `<div>${data.text}</div>`;
+            break;
+        case 'matched':
+            // Game is ready, initialize the game board
+            document.getElementById('modeSelect').style.display = 'none';
+            document.getElementById('gameContainer').style.display = 'block';
+            initGame('online', { playerMark: data.playerMark, roomCode: data.roomCode });
+            break;
+        case 'gameState':
+            updateGame(data);
+            break;
+        case 'gameOver':
+            showWinScreen(data.winner);
+            break;
+        case 'invalidMove':
+            // Optionally, provide feedback to the user
+            console.log("Invalid move");
+            break;
+        case 'opponent_left':
+            alert("Your opponent has left the game.");
+            // Optionally, reset to main menu
+            document.getElementById('gameContainer').style.display = 'none';
+            document.getElementById('modeSelect').style.display = 'flex';
+            break;
     }
   };
 

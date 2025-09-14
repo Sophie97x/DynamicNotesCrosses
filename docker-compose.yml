@@ -1,25 +1,9 @@
-version: '3.8'
-
 services:
   backend:
-    build:
-      context: ./backend
-    container_name: backend
-    networks:
-      - app-network
-
-  nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
-    container_name: nginx
+    build: ./backend
+    ports:
+      - "8080:8080"
+  frontend:
+    build: ./frontend
     ports:
       - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-
-networks:
-  app-network:
-    driver: bridge

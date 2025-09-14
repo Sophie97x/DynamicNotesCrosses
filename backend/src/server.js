@@ -1,22 +1,25 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const path = require('path');
+const { checkWin } = require('./gameLogic.js');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ noServer: true });
-
-server.on('upgrade', (request, socket, head) => {
-  const { pathname } = new URL(request.url, `http://${request.headers.host}`);
-
-  if (pathname === '/ws') {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
-    });
-  } else {
-    socket.destroy();
-  }
+const wss = new WebSocket.Server({ 
+    server, 
+    path: '/ws',
+    // Handle Cloudflare's proxy headers
+    handleProtocols: (protocols, req) => {
+        return protocols[0];
+    },
+    verifyClient: (info) => {
+        // Accept connections from Cloudflare and local network
+        const isCloudflare = info.req.headers['cf-connecting-ip'] !== undefined;
+        const isLocalNetwork = info.req.headers.host.includes('192.168.0.50') || 
+                             info.req.headers.host.includes('localhost') ||
+                             info.req.headers.host.includes('xo.sophiewilson.site');
+        return isCloudflare || isLocalNetwork;
+    }
 });
 
 // Game state
@@ -146,12 +149,42 @@ wss.on('connection', (ws) => {
                 if (data.roomCode) {
                     const game = games.get(data.roomCode);
                     if (game) {
-                        const opponent = game.players.find(p => p !== ws);
-                        if (opponent) {
-                            opponent.send(JSON.stringify({
-                                type: 'move',
-                                position: data.position
-                            }));
+                        const playerIndex = game.players.indexOf(ws);
+                        const playerMark = playerIndex === 0 ? 'X' : 'O';
+
+                        // Check if it's the player's turn
+                        if (game.currentTurn === playerMark && game.board[data.position] === null) {
+                            // Update board
+                            game.board[data.position] = playerMark;
+                            
+                            // Switch turns
+                            game.currentTurn = playerMark === 'X' ? 'O' : 'X';
+
+                            // Broadcast the move to both players
+                            game.players.forEach(player => {
+                                player.send(JSON.stringify({
+                                    type: 'gameState',
+                                    board: game.board,
+                                    currentTurn: game.currentTurn
+                                }));
+                            });
+
+                            // Check for win/draw
+                            const winner = checkWin(game.board);
+                            if (winner) {
+                                game.players.forEach(player => {
+                                    player.send(JSON.stringify({ type: 'gameOver', winner }));
+                                });
+                                games.delete(data.roomCode);
+                            } else if (!game.board.includes(null)) {
+                                game.players.forEach(player => {
+                                    player.send(JSON.stringify({ type: 'gameOver', winner: 'draw' }));
+                                });
+                                games.delete(data.roomCode);
+                            }
+                        } else {
+                            // It's not their turn or the cell is taken
+                            ws.send(JSON.stringify({ type: 'invalidMove' }));
                         }
                     }
                 }

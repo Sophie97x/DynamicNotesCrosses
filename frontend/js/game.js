@@ -1,10 +1,12 @@
-
 // --- Game State ---
 let board = Array(9).fill(null);
 let moveHistory = [];
 let moveCount = 0;
 let mode = null;
 let aiDifficulty = 'easy';
+let playerMark = 'X'; // 'X' or 'O'
+let currentTurn = 'X';
+let roomCode = null;
 const grid = document.getElementById('gameGrid');
 let cells = Array.from(grid.querySelectorAll('[data-cell]'));
 const winScreen = document.getElementById('winScreen');
@@ -50,6 +52,20 @@ function handleCellClickLocal(e) {
   checkWin();
 }
 
+function handleCellClickOnline(e) {
+    const idx = cells.indexOf(e.target);
+    if (idx === -1 || board[idx] || playerMark !== currentTurn) return;
+
+    // Send move to server
+    if (socket) {
+        socket.send(JSON.stringify({
+            type: 'move',
+            position: idx,
+            roomCode: roomCode
+        }));
+    }
+}
+
 function placeMark(idx, mark) {
   board[idx] = mark;
   cells[idx].textContent = mark;
@@ -84,25 +100,64 @@ function resetBoard() {
 }
 
 // --- Mode Initialization ---
-window.initGame = function(selectedMode, difficulty) {
-  mode = selectedMode;
-  aiDifficulty = difficulty || 'easy';
-  grid.style.display = 'grid';
-  resetBoard();
-  winScreen.style.display = 'none';
-  // Remove all listeners by replacing cells
-  cells = Array.from(grid.querySelectorAll('[data-cell]'));
-  for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i];
-    const newCell = cell.cloneNode(true);
-    cell.parentNode.replaceChild(newCell, cell);
-    cells[i] = newCell;
-    if (mode === 'local') {
-      newCell.addEventListener('click', handleCellClickLocal);
+window.initGame = function(selectedMode, options) {
+    mode = selectedMode;
+    if (mode === 'ai') {
+        aiDifficulty = options.difficulty || 'easy';
     }
-    // AI and online listeners will be set in their modules
-  }
-  drawBoard();
+    if (mode === 'online') {
+        playerMark = options.playerMark;
+        roomCode = options.roomCode;
+        currentTurn = 'X'; // X always starts
+    }
+    
+    grid.style.display = 'grid';
+    resetBoard();
+    winScreen.style.display = 'none';
+    // Remove all listeners by replacing cells
+    cells = Array.from(grid.querySelectorAll('[data-cell]'));
+    for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        const newCell = cell.cloneNode(true);
+        cell.parentNode.replaceChild(newCell, cell);
+        cells[i] = newCell;
+        if (mode === 'local') {
+            newCell.addEventListener('click', handleCellClickLocal);
+        } else if (mode === 'online') {
+            newCell.addEventListener('click', handleCellClickOnline);
+        }
+        // AI and online listeners will be set in their modules
+    }
+    drawBoard();
+    updateTurnIndicator();
 };
+
+function updateGame(gameState) {
+    board = gameState.board;
+    currentTurn = gameState.currentTurn;
+    drawBoard();
+    updateTurnIndicator();
+
+    // Disable/enable board based on turn
+    if (playerMark === currentTurn) {
+        grid.classList.remove('disabled');
+    } else {
+        grid.classList.add('disabled');
+    }
+}
+
+function updateTurnIndicator() {
+    const turnIndicator = document.getElementById('turnIndicator');
+    if (mode === 'online') {
+        if (currentTurn === playerMark) {
+            turnIndicator.textContent = "Your Turn";
+        } else {
+            turnIndicator.textContent = "Opponent's Turn";
+        }
+        turnIndicator.style.display = 'block';
+    } else {
+        turnIndicator.style.display = 'none';
+    }
+}
 
 // On load, do nothing until mode is selected
