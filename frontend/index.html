@@ -427,12 +427,17 @@ function handleServerMessage(data) {
             roomCode = data.roomCode;
             playerMark = data.playerMark;
             currentTurn = 'X'; // Always start with X
-            roomInfo.textContent = `You are ${playerMark} - ${currentTurn}'s Turn`;
+            
+            // Hide settings and show the game board
             document.getElementById('onlineSettings').style.display = 'none';
             document.getElementById('gameContainer').style.display = 'block';
-            cells.forEach(cell => cell.addEventListener('click', handleOnlineMove));
+            
+            roomInfo.textContent = `You are ${playerMark} - ${currentTurn}'s Turn`;
             turnIndicator.style.display = 'block';
             turnIndicator.textContent = `${currentTurn}'s Turn`;
+            
+            // Add click handlers for online play
+            cells.forEach(cell => cell.addEventListener('click', handleOnlineMove));
             break;
         case 'roomCreated':
             roomCode = data.roomCode;
