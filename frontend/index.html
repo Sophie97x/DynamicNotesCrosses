@@ -261,17 +261,19 @@ h1 {
   </div>
 </div>
 
-<div id="turnIndicator" style="display: none; margin-bottom: 10px;"></div>
-<div class="grid" id="gameGrid">
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
-  <div class="cell empty" data-cell></div>
+<div id="gameContainer" style="display:none;">
+    <div id="turnIndicator" style="display: none; margin-bottom: 10px;"></div>
+    <div class="grid" id="gameGrid">
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+      <div class="cell empty" data-cell></div>
+    </div>
 </div>
 <div class="win-screen" id="winScreen" style="display: none; flex-direction: column;">
   <h2 id="winnerText"></h2>
@@ -316,8 +318,10 @@ function selectMode(mode) {
     modeSelect.style.display = 'none';
     aiSettings.style.display = 'none';
     onlineSettings.style.display = 'none';
+    document.getElementById('gameContainer').style.display = 'none';
     
     if (mode === 'local') {
+        document.getElementById('gameContainer').style.display = 'block';
         setupLocalGame();
     } else if (mode === 'ai') {
         aiSettings.style.display = 'block';
@@ -697,6 +701,7 @@ function handleOpponentMove(position) {
 function startAIGame() {
     const difficulty = document.getElementById('aiDifficulty').value;
     aiSettings.style.display = 'none';
+    document.getElementById('gameContainer').style.display = 'block';
     setupAIGame(difficulty);
 }
 
@@ -808,7 +813,9 @@ function restartGame() {
 
 // Start in local 2-player mode
 window.onload = function() {
-    selectMode('local');
+    document.getElementById('gameContainer').style.display = 'none';
+    // By default, show mode selection
+    modeSelect.style.display = 'flex';
 };
 </script>
 <div class="footer">
