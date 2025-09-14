@@ -216,6 +216,14 @@ h1 {
   backdrop-filter: blur(5px);
   z-index: 1000;
   line-height: 1.5;
+  transition: opacity 0.5s ease-in-out;
+}
+.footer.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.grid.disabled {
+  pointer-events: none;
 }
 </style>
 </head>
@@ -261,7 +269,7 @@ h1 {
   </div>
 </div>
 
-<div id="gameContainer" style="display:none;">
+<div id="gameContainer">
     <div id="turnIndicator" style="display: none; margin-bottom: 10px;"></div>
     <div class="grid" id="gameGrid">
       <div class="cell empty" data-cell></div>
@@ -318,7 +326,6 @@ function selectMode(mode) {
     modeSelect.style.display = 'none';
     aiSettings.style.display = 'none';
     onlineSettings.style.display = 'none';
-    document.getElementById('gameContainer').style.display = 'none';
     
     if (mode === 'local') {
         document.getElementById('gameContainer').style.display = 'block';
@@ -327,6 +334,7 @@ function selectMode(mode) {
         aiSettings.style.display = 'block';
     } else if (mode === 'online') {
         onlineSettings.style.display = 'block';
+        document.getElementById('gameContainer').style.display = 'block';
         setupOnlineGame();
     }
 }
@@ -428,13 +436,10 @@ function handleServerMessage(data) {
             playerMark = data.playerMark;
             currentTurn = 'X'; // Always start with X
             
-            // Hide settings and show the game board
+            // Hide settings
             document.getElementById('onlineSettings').style.display = 'none';
-            document.getElementById('gameContainer').style.display = 'block';
             
-            roomInfo.textContent = `You are ${playerMark} - ${currentTurn}'s Turn`;
-            turnIndicator.style.display = 'block';
-            turnIndicator.textContent = `${currentTurn}'s Turn`;
+            updateTurnIndicator();
             
             // Add click handlers for online play
             cells.forEach(cell => cell.addEventListener('click', handleOnlineMove));
@@ -448,6 +453,12 @@ function handleServerMessage(data) {
         case 'availableRooms':
             updateAvailableRooms(data.rooms);
             break;
+        case 'gameState':
+            board = data.board;
+            currentTurn = data.currentTurn;
+            updateBoard(data.fadingPiece);
+            updateTurnIndicator();
+            break;
         case 'move':
             handleOpponentMove(data.position);
             break;
@@ -457,7 +468,55 @@ function handleServerMessage(data) {
         case 'roomFull':
             queueInfo.textContent = 'Room is full. Please try another room.';
             break;
+        case 'gameOver':
+            if (data.winner === 'draw') {
+                winnerText.textContent = "It's a Draw!";
+            } else {
+                winnerText.textContent = `${data.winner} Wins!`;
+            }
+            winScreen.style.display = 'flex';
+            break;
     }
+}
+
+function updateTurnIndicator() {
+    turnIndicator.style.display = 'block';
+    if (playerMark) {
+        turnIndicator.textContent = `You are ${playerMark}. It's ${currentTurn}'s turn.`;
+    } else {
+        turnIndicator.textContent = `It's ${currentTurn}'s turn.`;
+    }
+
+    if (currentTurn === playerMark) {
+        grid.classList.remove('disabled');
+    } else {
+        grid.classList.add('disabled');
+    }
+}
+
+function updateBoard(fadingPiece) {
+    // First, clear all 'faded' classes
+    cells.forEach(cell => cell.classList.remove('faded'));
+
+    board.forEach((mark, index) => {
+        const cell = cells[index];
+        cell.textContent = mark;
+        if (mark) {
+            cell.classList.remove('empty');
+        } else {
+            cell.classList.add('empty');
+        }
+    });
+
+    // Apply 'faded' class to the specific piece
+    if (fadingPiece !== null && fadingPiece >= 0) {
+        cells[fadingPiece].classList.add('faded');
+    }
+}
+
+function updateAvailableRooms(rooms) {
+    console.log("Available rooms:", rooms);
+    // In the future, you could display these rooms in the UI.
 }
 
 function handleLocalMove(e) {
@@ -657,36 +716,21 @@ function joinRoom() {
 }
 
 function handleOnlineMove(e) {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    
-    // Check if it's this player's turn
-    if (currentTurn !== playerMark) {
-        roomInfo.textContent = `Room: ${roomCode} - You are ${playerMark} - Wait for your turn!`;
-        return;
-    }
-    
+    if (currentTurn !== playerMark) return; // Not your turn
+
     const cell = e.target;
     const index = cells.indexOf(cell);
-    
-    // Validate move
-    if (cell.textContent || !cell.classList.contains('empty') || board[index]) return;
-    
-    // Make the move locally first
-    board[index] = playerMark;
-    placeMark(cell, playerMark);
-    
-    // Then send to opponent
-    socket.send(JSON.stringify({
-        type: 'move',
-        position: index,
-        roomCode: roomCode
-    }));
-    
-    // Switch turns
-    currentTurn = currentTurn === 'X' ? 'O' : 'X';
-    roomInfo.textContent = `Room: ${roomCode} - You are ${playerMark} - ${currentTurn}'s Turn`;
-    turnIndicator.textContent = `${currentTurn}'s Turn`;
-    checkWin();
+
+    if (board[index] !== null) return; // Cell already taken
+
+    // Send move to server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'move',
+            roomCode: roomCode,
+            position: index
+        }));
+    }
 }
 
 function handleOpponentMove(position) {
@@ -703,9 +747,8 @@ function handleOpponentMove(position) {
 
 // UI Helpers
 function startAIGame() {
-    const difficulty = document.getElementById('aiDifficulty').value;
-    aiSettings.style.display = 'none';
     document.getElementById('gameContainer').style.display = 'block';
+    const difficulty = document.getElementById('aiDifficulty').value;
     setupAIGame(difficulty);
 }
 
@@ -764,35 +807,17 @@ function showJoinRoom() {
 }
 
 function joinRoom() {
-    const roomCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
-    if (!roomCode) {
+    const roomCodeValue = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+    if (!roomCodeValue) {
         alert('Please enter a room code');
         return;
     }
     if (socket && socket.readyState === WebSocket.OPEN) {
-        // Remove any existing click handlers
-        cells.forEach(cell => {
-            cell.removeEventListener('click', handleOnlineMove);
-            cell.removeEventListener('click', handleLocalMove);
-            cell.removeEventListener('click', handlePlayerVsAIMove);
-        });
-        
-        // Reset the game state
-        resetGame();
-        
-        // Send join request
         socket.send(JSON.stringify({ 
-            type: 'joinRoom',
-            roomCode: roomCode
+            type: 'join', // Corrected message type
+            roomCode: roomCodeValue
         }));
-        
-        // Update UI
-        document.getElementById('roomCodeInput').value = '';
-        document.getElementById('joinRoomPanel').style.display = 'none';
         queueInfo.textContent = 'Joining room...';
-        
-        // Add click handlers for online play
-        cells.forEach(cell => cell.addEventListener('click', handleOnlineMove));
     }
 }
 
@@ -820,6 +845,38 @@ window.onload = function() {
     document.getElementById('gameContainer').style.display = 'none';
     // By default, show mode selection
     modeSelect.style.display = 'flex';
+
+    const footer = document.querySelector('.footer');
+    let footerTimeout;
+
+    function hideFooter() {
+        footer.classList.add('hidden');
+    }
+
+    function showFooter() {
+        footer.classList.remove('hidden');
+        clearTimeout(footerTimeout);
+        footerTimeout = setTimeout(hideFooter, 20000);
+    }
+
+    // Initial setup
+    footerTimeout = setTimeout(hideFooter, 20000);
+
+    // Show footer on mousemove
+    document.addEventListener('mousemove', (e) => {
+        if (e.clientY >= window.innerHeight - 60) { // 60px is footer height
+            showFooter();
+        }
+    });
+
+    // Keep footer visible when hovering over it
+    footer.addEventListener('mouseenter', () => {
+        clearTimeout(footerTimeout);
+    });
+
+    footer.addEventListener('mouseleave', () => {
+        footerTimeout = setTimeout(hideFooter, 5000); // Hide after 5s when mouse leaves
+    });
 };
 </script>
 <div class="footer">

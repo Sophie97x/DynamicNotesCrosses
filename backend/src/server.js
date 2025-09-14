@@ -48,7 +48,8 @@ function createRoom(player1, player2) {
     games.set(roomCode, {
         players: [player1, player2],
         board: Array(9).fill(null),
-        currentTurn: 'X'
+        currentTurn: 'X',
+        moveHistory: [] // Add move history for each game
     });
     
     // Notify players
@@ -128,7 +129,8 @@ wss.on('connection', (ws) => {
                 games.set(newRoomCode, {
                     players: [ws],
                     board: Array(9).fill(null),
-                    currentTurn: 'X'
+                    currentTurn: 'X',
+                    moveHistory: [] // Initialize move history
                 });
                 availableRooms.add(newRoomCode);
                 ws.send(JSON.stringify({
@@ -153,19 +155,35 @@ wss.on('connection', (ws) => {
 
                         // Check if it's the player's turn
                         if (game.currentTurn === playerMark && game.board[data.position] === null) {
-                            // Update board
+                            // Update board and history
                             game.board[data.position] = playerMark;
+                            game.moveHistory.push(data.position);
+
+                            // Implement the 6-move rule
+                            let fadingPiece = null;
+                            if (game.moveHistory.length >= 5) {
+                                fadingPiece = game.moveHistory[0];
+                            }
+                            if (game.moveHistory.length > 6) {
+                                const oldestMoveIndex = game.moveHistory.shift();
+                                game.board[oldestMoveIndex] = null;
+                            }
                             
                             // Switch turns
                             game.currentTurn = playerMark === 'X' ? 'O' : 'X';
 
-                            // Broadcast the move to both players
+                            // Broadcast the full game state to both players
+                            const gameStatePayload = {
+                                type: 'gameState',
+                                board: game.board,
+                                currentTurn: game.currentTurn,
+                                fadingPiece: fadingPiece
+                            };
+
                             game.players.forEach(player => {
-                                player.send(JSON.stringify({
-                                    type: 'gameState',
-                                    board: game.board,
-                                    currentTurn: game.currentTurn
-                                }));
+                                if (player.readyState === WebSocket.OPEN) {
+                                    player.send(JSON.stringify(gameStatePayload));
+                                }
                             });
 
                             // Check for win/draw
