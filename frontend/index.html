@@ -428,9 +428,8 @@ function handleServerMessage(data) {
             playerMark = data.playerMark;
             currentTurn = 'X'; // Always start with X
             roomInfo.textContent = `You are ${playerMark} - ${currentTurn}'s Turn`;
-            document.getElementById('displayedRoomCode').textContent = roomCode;
-            document.getElementById('roomCodeDisplay').style.display = 'inline-block';
-            document.getElementById('joinRoomPanel').style.display = 'none';
+            document.getElementById('onlineSettings').style.display = 'none';
+            document.getElementById('gameContainer').style.display = 'block';
             cells.forEach(cell => cell.addEventListener('click', handleOnlineMove));
             turnIndicator.style.display = 'block';
             turnIndicator.textContent = `${currentTurn}'s Turn`;

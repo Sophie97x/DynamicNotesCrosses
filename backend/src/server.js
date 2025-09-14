@@ -5,22 +5,7 @@ const { checkWin } = require('./gameLogic.js');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ 
-    server, 
-    path: '/ws',
-    // Handle Cloudflare's proxy headers
-    handleProtocols: (protocols, req) => {
-        return protocols[0];
-    },
-    verifyClient: (info) => {
-        // Accept connections from Cloudflare and local network
-        const isCloudflare = info.req.headers['cf-connecting-ip'] !== undefined;
-        const isLocalNetwork = info.req.headers.host.includes('192.168.0.50') || 
-                             info.req.headers.host.includes('localhost') ||
-                             info.req.headers.host.includes('xo.sophiewilson.site');
-        return isCloudflare || isLocalNetwork;
-    }
-});
+const wss = new WebSocket.Server({ server });
 
 // Game state
 const games = new Map(); // roomCode -> {players: [ws1, ws2], board: [], currentTurn: 'X'}
