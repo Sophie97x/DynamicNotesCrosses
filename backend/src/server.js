@@ -5,19 +5,18 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ 
-    server, 
-    path: '/ws',
-    // Handle Cloudflare's proxy headers
-    handleProtocols: (protocols, req) => {
-        return protocols[0];
-    },
-    verifyClient: (info) => {
-        // Accept connections from Cloudflare
-        const isCloudflare = info.req.headers['cf-connecting-ip'] !== undefined;
-        const isLocalhost = info.req.headers.host.includes('localhost');
-        return isCloudflare || isLocalhost;
-    }
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+  const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+
+  if (pathname === '/ws') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
 });
 
 // Game state
