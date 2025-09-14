@@ -420,30 +420,38 @@ function setupOnlineGame() {
         wsUrl = 'ws://localhost:8080/ws';
     } else {
         // Production (xo.sophiewilson.site)
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${wsProtocol}//${hostname}/ws`;
+        wsUrl = 'wss://xo.sophiewilson.site:8080/ws';  // Use explicit port for WebSocket
     }
     
     console.log('Connecting to WebSocket at:', wsUrl);
     
     let connectTimeout;
     
-    try {
-        socket = new WebSocket(wsUrl);
-        
-        // Set up connection timeout before any event handlers
-        connectTimeout = setTimeout(() => {
-            if (socket && socket.readyState !== WebSocket.OPEN) {
-                console.error('WebSocket connection timed out');
-                if (roomInfo) roomInfo.textContent = 'Connection timed out. Please try again.';
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    function connectWebSocket() {
+        try {
+            if (socket && socket.readyState !== WebSocket.CLOSED) {
                 socket.close();
             }
-        }, 5000);
-        
-        socket.onopen = () => {
-            clearTimeout(connectTimeout);  // Clear timeout on successful connection
-            console.log('WebSocket connected successfully');
-            if (roomInfo) roomInfo.textContent = 'Connected to server';
+            
+            socket = new WebSocket(wsUrl);
+            
+            // Set up connection timeout before any event handlers
+            connectTimeout = setTimeout(() => {
+                if (socket && socket.readyState !== WebSocket.OPEN) {
+                    console.error('WebSocket connection timed out');
+                    if (roomInfo) roomInfo.textContent = 'Connection timed out. Retrying...';
+                    retryConnection();
+                }
+            }, 5000);
+            
+            socket.onopen = () => {
+                clearTimeout(connectTimeout);  // Clear timeout on successful connection
+                console.log('WebSocket connected successfully');
+                retryCount = 0;  // Reset retry count on successful connection
+                if (roomInfo) roomInfo.textContent = 'Connected to server';
             // Wait a short moment to ensure the connection is fully established
             setTimeout(() => {
                 if (socket && socket.readyState === WebSocket.OPEN) {
@@ -455,14 +463,27 @@ function setupOnlineGame() {
         socket.onclose = (event) => {
             clearTimeout(connectTimeout);  // Clear timeout on close
             console.log('WebSocket disconnected:', event.code, event.reason);
-            if (roomInfo) roomInfo.textContent = 'Disconnected from server';
+            if (roomInfo) roomInfo.textContent = 'Disconnected from server. Retrying...';
+            retryConnection();
         };
         
         socket.onerror = (error) => {
             clearTimeout(connectTimeout);  // Clear timeout on error
             console.error('WebSocket error:', error);
-            if (roomInfo) roomInfo.textContent = 'Connection error';
+            if (roomInfo) roomInfo.textContent = 'Connection error. Retrying...';
+            // Error will trigger onclose, so no need to retry here
         };
+        
+        function retryConnection() {
+            if (retryCount < maxRetries) {
+                retryCount++;
+                console.log(`Retrying connection (${retryCount}/${maxRetries})...`);
+                setTimeout(connectWebSocket, 2000 * retryCount); // Exponential backoff
+            } else {
+                console.error('Max retry attempts reached');
+                if (roomInfo) roomInfo.textContent = 'Could not connect to server. Please try again later.';
+            }
+        }
         
         socket.onmessage = (event) => {
             try {
@@ -479,6 +500,10 @@ function setupOnlineGame() {
         if (roomInfo) roomInfo.textContent = 'Failed to connect to server';
     }
     
+    connectWebSocket();
+}
+
+function connectWebSocket() {
     try {
         socket = new WebSocket(wsUrl);
         
