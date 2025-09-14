@@ -5,7 +5,21 @@ const { checkWin } = require('./gameLogic.js');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+    // Use URL constructor to parse pathname
+    const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+
+    if (pathname === '/ws') {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+        });
+    } else {
+        // If the path is not for our WebSocket server, destroy the socket
+        socket.destroy();
+    }
+});
 
 // Game state
 const games = new Map(); // roomCode -> {players: [ws1, ws2], board: [], currentTurn: 'X'}
