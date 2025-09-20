@@ -161,12 +161,12 @@ wss.on('connection', (ws) => {
 
                             // Implement the 6-move rule
                             let fadingPiece = null;
-                            if (game.moveHistory.length >= 5) {
-                                fadingPiece = game.moveHistory[0];
-                            }
-                            if (game.moveHistory.length > 6) {
+                            if (game.moveHistory.length > 5) {
                                 const oldestMoveIndex = game.moveHistory.shift();
                                 game.board[oldestMoveIndex] = null;
+                            }
+                            if (game.moveHistory.length === 5) {
+                                fadingPiece = game.moveHistory[0];
                             }
                             
                             // Switch turns
