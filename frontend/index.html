@@ -454,6 +454,9 @@ function handleServerMessage(data) {
             updateAvailableRooms(data.rooms);
             break;
         case 'gameState':
+            if (!Array.isArray(data.board) || data.board.length !== 9 ||
+                !data.board.every(mark => mark === null || mark === 'X' || mark === 'O') ||
+                !['X', 'O'].includes(data.currentTurn)) break;
             board = data.board;
             currentTurn = data.currentTurn;
             updateBoard(data.fadingPiece);
@@ -509,7 +512,7 @@ function updateBoard(fadingPiece) {
     });
 
     // Apply 'faded' class to the specific piece
-    if (fadingPiece !== null && fadingPiece >= 0) {
+    if (Number.isInteger(fadingPiece) && fadingPiece >= 0 && fadingPiece < 9) {
         cells[fadingPiece].classList.add('faded');
     }
 }
@@ -734,7 +737,7 @@ function handleOnlineMove(e) {
 }
 
 function handleOpponentMove(position) {
-    if (position >= 0 && position < 9 && cells[position].classList.contains('empty')) {
+    if (Number.isInteger(position) && position >= 0 && position < 9 && cells[position].classList.contains('empty')) {
         const opponentMark = currentTurn;  // Use currentTurn as that's the current player's mark
         board[position] = opponentMark;
         placeMark(cells[position], opponentMark);

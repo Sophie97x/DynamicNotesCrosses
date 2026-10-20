@@ -5,11 +5,17 @@ const { checkWin } = require('./gameLogic.js');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ noServer: true });
+const wss = new WebSocket.Server({ noServer: true, maxPayload: 16 * 1024 });
 
 server.on('upgrade', (request, socket, head) => {
     // Use URL constructor to parse pathname
-    const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+    let pathname;
+    try {
+        ({ pathname } = new URL(request.url, 'http://localhost'));
+    } catch {
+        socket.destroy();
+        return;
+    }
 
     if (pathname === '/ws') {
         wss.handleUpgrade(request, socket, head, (ws) => {
@@ -71,8 +77,16 @@ wss.on('connection', (ws) => {
     playerStats.online++;
     broadcastStats();
 
+    // Oversized frames and transport errors must only close this connection.
+    ws.on('error', () => ws.terminate());
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
+        let data;
+        try {
+            data = JSON.parse(message.toString());
+        } catch {
+            return;
+        }
+        if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.type !== 'string') return;
         
         switch(data.type) {
             case 'getStats':
@@ -84,6 +98,7 @@ wss.on('connection', (ws) => {
                 break;
                 
             case 'queue':
+                if (queue.has(ws) || [...games.values()].some(game => game.players.includes(ws))) break;
                 queue.add(ws);
                 playerStats.inQueue++;
                 broadcastStats();
@@ -104,7 +119,11 @@ wss.on('connection', (ws) => {
             case 'join':
                 if (data.roomCode) {
                     const game = games.get(data.roomCode);
-                    if (game && game.players.length < 2) {
+                    if (game && game.players.length < 2 && !game.players.includes(ws) && ![...games.values()].some(entry => entry.players.includes(ws))) {
+                        if (queue.delete(ws)) {
+                            playerStats.inQueue = queue.size;
+                            broadcastStats();
+                        }
                         game.players.push(ws);
                         availableRooms.delete(data.roomCode);
                         ws.send(JSON.stringify({
@@ -125,6 +144,11 @@ wss.on('connection', (ws) => {
                 break;
                 
             case 'createRoom':
+                if ([...games.values()].some(game => game.players.includes(ws))) break;
+                if (queue.delete(ws)) {
+                    playerStats.inQueue = queue.size;
+                    broadcastStats();
+                }
                 const newRoomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
                 games.set(newRoomCode, {
                     players: [ws],
@@ -147,10 +171,18 @@ wss.on('connection', (ws) => {
                 break;
                 
             case 'move':
+                if (!Number.isInteger(data.position) || data.position < 0 || data.position > 8) {
+                    ws.send(JSON.stringify({ type: 'invalidMove' }));
+                    break;
+                }
                 if (data.roomCode) {
                     const game = games.get(data.roomCode);
                     if (game) {
                         const playerIndex = game.players.indexOf(ws);
+                        if (playerIndex < 0 || game.players.length !== 2) {
+                            ws.send(JSON.stringify({ type: 'invalidMove' }));
+                            break;
+                        }
                         const playerMark = playerIndex === 0 ? 'X' : 'O';
 
                         // Check if it's the player's turn
@@ -229,5 +261,8 @@ wss.on('connection', (ws) => {
     });
 });
 
-const PORT = 8080;
-server.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+if (require.main === module) {
+    const PORT = Number(process.env.PORT || 8080);
+    server.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+}
+module.exports = { server };
