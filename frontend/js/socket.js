@@ -22,12 +22,17 @@ document.getElementById('connectBtn').addEventListener('click', () => {
   };
 
   socket.onmessage = (msg) => {
-    const data = JSON.parse(msg.data);
+    let data;
+    try { data = JSON.parse(msg.data); } catch { return; }
+    if (!data || typeof data !== 'object') return;
     
     switch(data.type) {
         case 'message':
         case 'echo':
-            output.innerHTML += `<div>${data.text}</div>`;
+            if (typeof data.text !== 'string') break;
+            const line = document.createElement('div');
+            line.textContent = data.text;
+            output.appendChild(line);
             break;
         case 'matched':
             // Game is ready, initialize the game board
