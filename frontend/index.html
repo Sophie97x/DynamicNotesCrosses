@@ -756,6 +756,7 @@ function startAIGame() {
 }
 
 function placeMark(cell, mark) {
+    if (mark !== 'X' && mark !== 'O') return;
     moveHistory.push(cells.indexOf(cell));
     cell.textContent = mark;
     cell.classList.remove('empty');
